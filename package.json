@@ -1,0 +1,29 @@
+{
+  "name": "@inowu/deploy-gate",
+  "version": "0.1.0",
+  "description": "Coordinates Docker Swarm rolling deploys: a 'cron' replica writes a marker after migrations, 'api' replicas wait for it before binding the HTTP port.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Inowu/deploy-gate.git"
+  },
+  "bin": { "deploy-gate": "dist/cli.js" },
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p .",
+    "prepare": "tsc -p ."
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

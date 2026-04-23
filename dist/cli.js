@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const lib_js_1 = require("./lib.js");
+function bail(msg, code = 1) {
+    console.error(`[deploy-gate] ${msg}`);
+    process.exit(code);
+}
+const databaseUrl = process.env.DEPLOY_GATE_DATABASE_URL ||
+    process.env.DB_TENANT_URL ||
+    process.env.DATABASE_URL;
+const version = process.env.IMAGE_TAG || process.env.DEPLOY_GATE_VERSION;
+const cmd = process.argv[2];
+if (!cmd || !['mark', 'wait'].includes(cmd)) {
+    bail('usage: deploy-gate (mark|wait)', 2);
+}
+if (!databaseUrl) {
+    bail('missing DATABASE_URL (set DEPLOY_GATE_DATABASE_URL, DB_TENANT_URL, or DATABASE_URL)');
+}
+if (!version) {
+    bail('missing version (set IMAGE_TAG or DEPLOY_GATE_VERSION)');
+}
+(async () => {
+    if (cmd === 'mark') {
+        await (0, lib_js_1.markReady)({ databaseUrl, version });
+        console.log(`[deploy-gate] marked ready version=${version}`);
+        return;
+    }
+    // cmd === 'wait'
+    let timeoutMs = parseInt(process.env.DEPLOY_GATE_TIMEOUT_MS || '0', 10);
+    if (!timeoutMs) {
+        const n = await (0, lib_js_1.getTenantCount)(databaseUrl);
+        timeoutMs = (0, lib_js_1.computeTimeoutMs)({ tenantCount: n });
+        console.log(`[deploy-gate] dynamic timeout: ${n} tenants × 3min + 2min base = ` +
+            `${(timeoutMs / 60_000).toFixed(1)}min`);
+    }
+    else {
+        console.log(`[deploy-gate] timeout from env: ${(timeoutMs / 60_000).toFixed(1)}min`);
+    }
+    await (0, lib_js_1.waitForReady)({
+        databaseUrl,
+        version,
+        timeoutMs,
+        onPoll: (cur, exp, elapsed) => console.log(`[deploy-gate] waiting ${(elapsed / 1000).toFixed(0)}s ` +
+            `(timeout ${(timeoutMs / 1000).toFixed(0)}s): ` +
+            `have='${cur ?? ''}' want='${exp}'`),
+    });
+    console.log(`[deploy-gate] ready version=${version}`);
+})().catch((err) => bail(err.message));
+//# sourceMappingURL=cli.js.map
