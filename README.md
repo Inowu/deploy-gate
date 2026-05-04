@@ -18,18 +18,61 @@ work in Swarm — the field is silently ignored by `docker stack deploy`.
 ## The solution
 
 `cron` runs migrations, then writes a "ready" marker into Postgres tagged
-with the image version. `api` waits for the marker to match its own version
-before starting the application. The marker is per-deploy (keyed by image
-tag), so rollbacks are safe — an `api` from a previous version waits for
-its own marker, not a future one.
+with the image version. `api` waits for the marker for **its own** version
+before starting the application. Markers are stored one row per version, so
+rollbacks are safe — an `api` from a previous version finds its own row,
+which a newer cron deploy never overwrites.
+
+## Storage
+
+Markers live in a single table (auto-created by `mark`):
+
+```sql
+CREATE TABLE _deploy_gate_markers (
+  version    TEXT PRIMARY KEY,
+  marked_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+`mark` does an `INSERT ... ON CONFLICT (version) DO UPDATE SET marked_at = now()`
+— idempotent for the same version, append-only across versions. `wait` checks
+for the existence of its own version's row and returns the moment it appears.
+
+The table grows by one row per unique deployed version. There is no automatic
+pruning; if you deploy thousands of distinct versions and care about the row
+count, prune externally with a one-liner cron job.
 
 ## Install
 
 ```bash
-pnpm add github:Inowu/deploy-gate#v0.1.0
+pnpm add github:Inowu/deploy-gate#v0.2.0
 # or pin a specific commit
 pnpm add github:Inowu/deploy-gate#<sha>
 ```
+
+## Upgrading from v0.1
+
+v0.1 stored a single overwriting row in `_app_deploy_markers` keyed on a
+constant `'deploy_ready'` string. That schema had a critical pitfall: a newer
+deploy's mark would overwrite an older deploy's marker, and any `api`
+container running the older version would then wait forever for its own
+marker (which had been overwritten) and time out — the rollback case the
+README claimed to handle. v0.2 fixes this with the per-version row layout
+above.
+
+To upgrade:
+
+1. Bump the dependency in `package.json` (`github:Inowu/deploy-gate#v0.2.0`).
+2. Roll cron and api together in a single deploy. Cron writes the v0.2
+   marker into the new table; api on v0.2 reads from the new table.
+3. The legacy `_app_deploy_markers` table is left in place untouched. Drop
+   it manually after you've confirmed the upgrade is stable:
+   `DROP TABLE _app_deploy_markers;`
+
+Old api containers running v0.1 during the rollout still read from the old
+table — that path is unaffected by the upgrade. Mixing v0.1 and v0.2 across
+the cron/api split (e.g. cron upgraded, api still on v0.1) breaks because
+they read/write different tables; always upgrade them together.
 
 ## Use from your entrypoint
 

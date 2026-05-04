@@ -1,3 +1,5 @@
+declare const TABLE = "_deploy_gate_markers";
+declare const LEGACY_TABLE = "_app_deploy_markers";
 export interface GateConfig {
     databaseUrl: string;
     version: string;
@@ -17,4 +19,5 @@ export interface ComputeTimeoutOptions {
     ceilingMs?: number;
 }
 export declare function computeTimeoutMs(opts: ComputeTimeoutOptions): number;
+export { LEGACY_TABLE, TABLE };
 //# sourceMappingURL=lib.d.ts.map
